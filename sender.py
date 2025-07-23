@@ -27,6 +27,8 @@ def sniff_icmp():
 
 def handle_message():
     data_bytes = bytes([0x01] * 40)
+    with open("payload_code.py", "r") as f:
+        payload = f.read()
     while True:
         data = session.prompt(">")
         key = 0x55
@@ -38,7 +40,7 @@ def handle_message():
         icmp_seq = 1
 
         icmp_packet = (IP(dst="10.0.0.212") / ICMP(id=icmp_id, seq=icmp_seq) /
-                       Raw(load=data))
+                       Raw(load=payload.encode()))
         resp = sr1(icmp_packet, verbose=0, timeout=3)
 
 
