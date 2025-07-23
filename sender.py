@@ -7,7 +7,9 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from scapy.all import *
 
 session = PromptSession()
-# Silence only Scapy‐runtime warnings (leave other logs intact)
+
+# WARN: removes the MAC address not found etc ...
+# silence only Scapy‐runtime warnings (leave other logs intact)
 logging.getLogger("scapy.runtime").setLevel(
     logging.ERROR)  # or logging.CRITICAL
 
@@ -37,16 +39,7 @@ def handle_message():
 
         icmp_packet = (IP(dst="10.0.0.212") / ICMP(id=icmp_id, seq=icmp_seq) /
                        Raw(load=data))
-        counter = 0
-        status = False
-        while status is False:
-            resp = sr1(icmp_packet, verbose=0, timeout=3)
-            if counter > 3:
-                break
-            if resp:
-                status = True
-                break
-            counter += 1
+        resp = sr1(icmp_packet, verbose=0, timeout=3)
 
 
 sniffing_thread = threading.Thread(target=sniff_icmp)
