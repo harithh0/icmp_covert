@@ -97,6 +97,7 @@ def handle_message():
             print(resp)
         else:
             print("packet lost")
+
     # while True:
     #     data = session.prompt(">")
     #     aesgcm = AESGCM(symkey)
