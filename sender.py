@@ -19,6 +19,8 @@ logging.getLogger("scapy.runtime").setLevel(
 MAX_MESSAGE_SIZE = 40
 FILLER_STRING = "\00"
 
+full_chunks = {}
+
 with open("aes_key.bin", "rb") as key_file:
     symkey = key_file.read()
 
@@ -27,7 +29,15 @@ def sniff_icmp():
 
     def handle_recv(packet):
         if packet[ICMP].type == 0:
+            print(packet)
             return
+
+        packet_recv_data = packet[Raw].load.decode()
+        message_code = int(packet_recv_data[0])
+        if message_code == 9:
+            chunk_id = int(packet_recv_data[1:])
+            send_icmp(full_chunks[chunk_id])
+
         print_formatted_text("Message recieved:", packet[Raw].load)
 
     fil = "src host 10.0.0.212 and icmp"
@@ -43,6 +53,21 @@ def get_payload_chunks() -> list[bytes]:
         encrypted_payload = encrypt_payload(payload)
         chunks = []
         chunk_index = 0
+        i = 0
+        # splits chunks into 40 bytes including the pre data headers
+        while True:
+            pre_data = f"{TYPE_MESSAGE_ID}{chunk_index}{FILLER_STRING}"
+            true_size = MAX_MESSAGE_SIZE - len(pre_data)
+            chunk = encrypted_payload[i:i + true_size]
+            final_chunk = pre_data.encode() + chunk
+            print(chunk)
+            if chunk == b"":
+                break
+            chunks.append(final_chunk)
+            full_chunks[chunk_index] = final_chunk
+            i += true_size
+            chunk_index += 1
+        return chunks
         for i in range(0, len(encrypted_payload) + 1, MAX_MESSAGE_SIZE):
             pre_data = f"{TYPE_MESSAGE_ID}{chunk_index}"
             chunk = pre_data.encode() + encrypted_payload[i:i +
@@ -88,11 +113,18 @@ def encrypt_payload(data: str) -> bytes:
 
 # [1 message_type][x chunk_index][x total_chunks][x encrypted_payload_chunk] : Total 40
 
+test = 0
+
 
 def handle_message():
+    global test
     payload_chunks = get_payload_chunks()
 
     for chunk in payload_chunks:
+        if test == 0:
+            test += 1
+            continue
+
         resp = send_icmp(chunk)
         if resp is not None:
             print(resp)
