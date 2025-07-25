@@ -17,11 +17,8 @@ logging.getLogger("scapy.runtime").setLevel(
     logging.ERROR)  # or logging.CRITICAL
 
 MAX_MESSAGE_SIZE = 40
+FILLER_STRING = "\00"
 
-# with open("public.pem", "r") as f:
-#     public_key = rsa.PublicKey.load_pkcs1(f.read())
-
-# Read key from file
 with open("aes_key.bin", "rb") as key_file:
     symkey = key_file.read()
 
@@ -35,17 +32,6 @@ def sniff_icmp():
 
     fil = "src host 10.0.0.212 and icmp"
     sniff(filter=fil, prn=handle_recv)
-
-
-FILLER_STRING = "\00"
-KEY = 0x55
-
-# def encrypt_payload(payload) -> str:
-#     encrypted_payload = ""
-#     for char in payload:
-#         encrypted_payload += str(ord(char) ^ KEY) + "|"
-#
-#     return encrypted_payload
 
 
 def get_payload_chunks() -> list[bytes]:
@@ -63,11 +49,13 @@ def get_payload_chunks() -> list[bytes]:
         return chunks
 
 
+icmp_seq = 1
+
+
 def send_icmp(data: bytes):
     # the id comes from the current process id and doing a Internet checksum (used to identify the "session" or "process" sending the ping)
     icmp_id = os.getpid() & 0xFFFF
     # seq increments per sent packet, helps detect packet loss, track individual requests
-    icmp_seq = 1
 
     icmp_packet = IP(dst="10.0.0.212") / ICMP(id=icmp_id,
                                               seq=icmp_seq) / Raw(load=data)
@@ -79,6 +67,8 @@ def send_icmp(data: bytes):
     else:
         return None
 
+    icmp_seq += 1
+
 
 def encrypt_payload(data: str) -> bytes:
     aesgcm = AESGCM(symkey)
@@ -86,6 +76,9 @@ def encrypt_payload(data: str) -> bytes:
     ciphertext = aesgcm.encrypt(nonce, data.encode(), associated_data=None)
     complete_ciphertext = nonce + ciphertext
     return complete_ciphertext
+
+
+# [1 message_type][x chunk_index][x total_chunks][x encrypted_payload_chunk] : Total 40
 
 
 def handle_message():
