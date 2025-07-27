@@ -3,7 +3,6 @@ import os
 import threading
 import time
 
-import rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from prompt_toolkit import PromptSession, print_formatted_text, prompt
 from prompt_toolkit.patch_stdout import patch_stdout
@@ -20,7 +19,7 @@ MAX_MESSAGE_SIZE = 40
 RESEND_MESSAGE_CODE = 9
 CHUNK_MESSAGE_CODE = 3
 DELIMITER = "\00"
-FILLER_STRING = "\00"
+FILLER_STRING = "\01"
 CONTROL_MESSAGE_CODE = 1
 FINISH_CODE = 2
 target = "10.0.0.212"
@@ -62,7 +61,7 @@ def get_payload_chunks() -> list[bytes]:
         i = 0
         # splits chunks into 40 bytes including the pre data headers
         while True:
-            pre_data = f"{CHUNK_MESSAGE_CODE}{chunk_index}{FILLER_STRING}"
+            pre_data = f"{CHUNK_MESSAGE_CODE}{chunk_index}{DELIMITER}"
             true_size = MAX_MESSAGE_SIZE - len(pre_data)
             chunk = encrypted_payload[i:i + true_size]
             final_chunk = pre_data.encode() + chunk
@@ -114,9 +113,10 @@ def handle_message():
     payload_chunks = get_payload_chunks()
 
     # first send the amount of chunks to expect
+    chunks_amount_payload = f"{CONTROL_MESSAGE_CODE}{len(payload_chunks)}{DELIMITER}"
     send_chunk_size_resp = send_icmp(
-        f"{CONTROL_MESSAGE_CODE}{len(payload_chunks)}{DELIMITER}aljfdsaf".
-        encode())
+        f"{chunks_amount_payload}{(MAX_MESSAGE_SIZE - len(chunks_amount_payload)) * FILLER_STRING}"
+        .encode())
 
     # send chunks
     for chunk in payload_chunks:
@@ -132,7 +132,10 @@ def handle_message():
     time.sleep(2)
 
     # send that it has finished sending all chunks
-    send_finish_resp = send_icmp(f"{FINISH_CODE}{DELIMITER}".encode())
+    finish_payload = f"{FINISH_CODE}{DELIMITER}"
+    send_finish_resp = send_icmp(
+        f"{finish_payload}{(MAX_MESSAGE_SIZE - len(finish_payload)) * FILLER_STRING}"
+        .encode())
 
     # while True:
     #     data = session.prompt(">")

@@ -6,7 +6,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from scapy.all import *
 
 HOST_IP = "10.0.0.113"
-FILLER_STRING = b"\00"
+FILLER_STRING = b"\01"
+DELIMITER = b"\00"
 RESEND_MESSGE_CODE = 9
 CHUNK_MESSAGE_CODE = 3
 CONTROL_MESSAGE_CODE = 1
@@ -40,8 +41,9 @@ def handle_data_received(packet):
 
     # first occurance of filler string
     try:
-        headers, encrypted = packet_data.split(FILLER_STRING, 1)
-    except:
+        headers, encrypted = packet_data.split(DELIMITER, 1)
+    except Exception as e:
+        print(str(e))
         # NO PADDING FOUND in packet_data
         print("NO PADDING FOUND in packet_data")
         return
@@ -100,7 +102,6 @@ def decrypt_payload():
     encrypted_data = b"".join(payload_list)
     print("payload list", payload_list)
     print("encrypted data:", encrypted_data)
-    sleep(100)
     aesgcm = AESGCM(symkey)
     nonce = encrypted_data[:12]
     ciphertext = encrypted_data[12:]
