@@ -41,9 +41,10 @@ def sniff_icmp():
             return
 
         packet_recv_data = packet[Raw].load.decode()
-        message_code = int(packet_recv_data[0])
+        message_data, extra = packet_recv_data.split(DELIMITER, 1)
+        message_code = int(message_data[0])
         if message_code == RESEND_MESSAGE_CODE:
-            chunk_id = int(packet_recv_data[1:])
+            chunk_id = int(message_data[1:])
             print(f"Recieved resend packet for chunk {chunk_id}")
             send_icmp(full_chunks[chunk_id])
         else:
@@ -120,9 +121,9 @@ def handle_message():
 
     # send chunks
     for chunk in payload_chunks:
-        # if test == 0:
-        #     test += 1
-        #     continue
+        if test == 0:
+            test += 1
+            continue
         resp = send_icmp(chunk)
         if resp is not None:
             print(resp)

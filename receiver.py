@@ -6,8 +6,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from scapy.all import *
 
 HOST_IP = "10.0.0.113"
-FILLER_STRING = b"\01"
-DELIMITER = b"\00"
+FILLER_STRING = "\01"
+DELIMITER = "\00"
 RESEND_MESSGE_CODE = 9
 CHUNK_MESSAGE_CODE = 3
 CONTROL_MESSAGE_CODE = 1
@@ -41,7 +41,7 @@ def handle_data_received(packet):
 
     # first occurance of filler string
     try:
-        headers, encrypted = packet_data.split(DELIMITER, 1)
+        headers, encrypted = packet_data.split(DELIMITER.encode(), 1)
     except Exception as e:
         print(str(e))
         # NO PADDING FOUND in packet_data
@@ -73,6 +73,9 @@ def handle_data_received(packet):
     # data_received.append(packet[Raw].load)
 
 
+MAX_MESSAGE_SIZE = 40
+
+
 def send_recover(missing: set[int]):
     global icmp_seq
 
@@ -81,10 +84,14 @@ def send_recover(missing: set[int]):
     # seq increments per sent packet, helps detect packet loss, track individual requests
 
     for chunk_index in missing:
-        payload = f"{RESEND_MESSGE_CODE}{chunk_index}"
+        payload = f"{RESEND_MESSGE_CODE}{chunk_index}{DELIMITER}"
+        full_payload = (
+            f"{payload}{(MAX_MESSAGE_SIZE - len(payload)) * FILLER_STRING}".
+            encode())
+        print("full payload", full_payload)
 
         icmp_packet = (IP(dst=HOST_IP) / ICMP(id=icmp_id, seq=icmp_seq) /
-                       Raw(load=payload.encode()))
+                       Raw(load=full_payload))
 
         resp = sr1(icmp_packet, verbose=0, timeout=3)
 
