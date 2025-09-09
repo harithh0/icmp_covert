@@ -15,16 +15,20 @@ session = PromptSession()
 logging.getLogger("scapy.runtime").setLevel(
     logging.ERROR)  # or logging.CRITICAL
 
+# message codes
 MAX_MESSAGE_SIZE = 40
 RESEND_MESSAGE_CODE = 9
 CHUNK_MESSAGE_CODE = 3
-DELIMITER = "\00"
-FILLER_STRING = "\01"
 CONTROL_MESSAGE_CODE = 1
 FINISH_CODE = 2
-target = "10.0.0.212"
 
-fil = f"src host {target} and icmp"
+DELIMITER = "\00"
+FILLER_STRING = "\01"
+
+target = "127.0.0.1"
+
+# fil = f"src host {target} and icmp"
+fil = "icmp"
 full_chunks = {}
 icmp_seq = 1
 
@@ -50,7 +54,7 @@ def sniff_icmp():
         else:
             print_formatted_text("No code message recieved:", packet[Raw].load)
 
-    sniff(filter=fil, prn=handle_recv)
+    sniff(filter=fil, prn=handle_recv, iface="tailscale0")
 
 
 def get_payload_chunks() -> list[bytes]:
@@ -113,7 +117,7 @@ def handle_message():
     # WARN: get_payload_chunks must be called to initialize the full_chunks dict
     payload_chunks = get_payload_chunks()
 
-    # first send the amount of chunks to expect
+    # send the amount of chunks to expect
     chunks_amount_payload = f"{CONTROL_MESSAGE_CODE}{len(payload_chunks)}{DELIMITER}"
     send_chunk_size_resp = send_icmp(
         f"{chunks_amount_payload}{(MAX_MESSAGE_SIZE - len(chunks_amount_payload)) * FILLER_STRING}"
@@ -150,4 +154,4 @@ def handle_message():
 sniffing_thread = threading.Thread(target=sniff_icmp)
 message_thread = threading.Thread(target=handle_message)
 sniffing_thread.start()
-message_thread.start()
+# message_thread.start()
