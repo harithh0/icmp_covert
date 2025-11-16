@@ -49,6 +49,8 @@ def handle_data_received(packet):
         return
     headers = headers.decode()
     message_type = int(headers[0])
+
+    # recv actualy payload chunk
     if message_type == CHUNK_MESSAGE_CODE:
         # make sure total_chunk initialized first
         if total_chunks == -1:
@@ -58,11 +60,14 @@ def handle_data_received(packet):
         chunks_recieved.add(chunk_index)
         print(message_type, chunk_index)
         print(headers, encrypted)
+
+    # recv first payload with chunks to expect
     elif message_type == CONTROL_MESSAGE_CODE:
         total_chunks = int(headers[1:])
         print("total ch", total_chunks)
         expected_chunks = set(range(0, total_chunks))
         print("recieved code 1", total_chunks)
+    # recv final packet and then start checking each packets payload was receieved
     elif message_type == FINISH_CODE:
         print("Starting checking")
         start_checking = True
@@ -86,12 +91,13 @@ def send_recover(missing: set[int]):
     for chunk_index in missing:
         payload = f"{RESEND_MESSGE_CODE}{chunk_index}{DELIMITER}"
         full_payload = (
-            f"{payload}{(MAX_MESSAGE_SIZE - len(payload)) * FILLER_STRING}".
-            encode())
+            f"{payload}{(MAX_MESSAGE_SIZE - len(payload)) * FILLER_STRING}".encode()
+        )
         print("full payload", full_payload)
 
-        icmp_packet = (IP(dst=HOST_IP) / ICMP(id=icmp_id, seq=icmp_seq) /
-                       Raw(load=full_payload))
+        icmp_packet = (
+            IP(dst=HOST_IP) / ICMP(id=icmp_id, seq=icmp_seq) / Raw(load=full_payload)
+        )
 
         resp = sr1(icmp_packet, verbose=0, timeout=3)
 
@@ -120,9 +126,7 @@ stop_sniffing = False
 
 
 def sniffer():
-    sniff(filter=fil,
-          prn=handle_data_received,
-          stop_filter=lambda p: stop_sniffing)
+    sniff(filter=fil, prn=handle_data_received, stop_filter=lambda p: stop_sniffing)
 
 
 sniffer_thread = threading.Thread(target=sniffer, daemon=True)

@@ -12,8 +12,7 @@ session = PromptSession()
 
 # WARN: removes the MAC address not found etc ...
 # silence only Scapy‐runtime warnings (leave other logs intact)
-logging.getLogger("scapy.runtime").setLevel(
-    logging.ERROR)  # or logging.CRITICAL
+logging.getLogger("scapy.runtime").setLevel(logging.ERROR)  # or logging.CRITICAL
 
 # message codes
 MAX_MESSAGE_SIZE = 40
@@ -37,7 +36,6 @@ with open("aes_key.bin", "rb") as key_file:
 
 
 def sniff_icmp():
-
     def handle_recv(packet):
         # regular icmp reply
         if packet[ICMP].type == 0:
@@ -68,7 +66,7 @@ def get_payload_chunks() -> list[bytes]:
         while True:
             pre_data = f"{CHUNK_MESSAGE_CODE}{chunk_index}{DELIMITER}"
             true_size = MAX_MESSAGE_SIZE - len(pre_data)
-            chunk = encrypted_payload[i:i + true_size]
+            chunk = encrypted_payload[i : i + true_size]
             final_chunk = pre_data.encode() + chunk
             print(chunk)
             if chunk == b"":
@@ -87,8 +85,7 @@ def send_icmp(data: bytes):
     icmp_id = os.getpid() & 0xFFFF
     # seq increments per sent packet, helps detect packet loss, track individual requests
 
-    icmp_packet = IP(dst=target) / ICMP(id=icmp_id,
-                                        seq=icmp_seq) / Raw(load=data)
+    icmp_packet = IP(dst=target) / ICMP(id=icmp_id, seq=icmp_seq) / Raw(load=data)
 
     resp = sr1(icmp_packet, verbose=0, timeout=3)
 
@@ -120,8 +117,8 @@ def handle_message():
     # send the amount of chunks to expect
     chunks_amount_payload = f"{CONTROL_MESSAGE_CODE}{len(payload_chunks)}{DELIMITER}"
     send_chunk_size_resp = send_icmp(
-        f"{chunks_amount_payload}{(MAX_MESSAGE_SIZE - len(chunks_amount_payload)) * FILLER_STRING}"
-        .encode())
+        f"{chunks_amount_payload}{(MAX_MESSAGE_SIZE - len(chunks_amount_payload)) * FILLER_STRING}".encode()
+    )
 
     # send chunks
     for chunk in payload_chunks:
@@ -139,8 +136,8 @@ def handle_message():
     # send that it has finished sending all chunks
     finish_payload = f"{FINISH_CODE}{DELIMITER}"
     send_finish_resp = send_icmp(
-        f"{finish_payload}{(MAX_MESSAGE_SIZE - len(finish_payload)) * FILLER_STRING}"
-        .encode())
+        f"{finish_payload}{(MAX_MESSAGE_SIZE - len(finish_payload)) * FILLER_STRING}".encode()
+    )
 
     # while True:
     #     data = session.prompt(">")
@@ -154,4 +151,4 @@ def handle_message():
 sniffing_thread = threading.Thread(target=sniff_icmp)
 message_thread = threading.Thread(target=handle_message)
 sniffing_thread.start()
-# message_thread.start()
+message_thread.start()
