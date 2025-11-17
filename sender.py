@@ -26,6 +26,7 @@ DELIMITER = "\00"
 FILLER_STRING = "\01"
 
 target = "10.0.0.194"
+target = "192.168.0.59"
 
 # fil = f"src host {target} and icmp"
 
@@ -39,6 +40,9 @@ with open("aes_key.bin", "rb") as key_file:
 
 def sniff_icmp():
     def handle_recv(packet):
+        if packet[ICMP].type == 0:
+            return
+
         try:
             print(base64.b64decode(packet[Raw].load).decode())
         except Exception:

@@ -8,7 +8,7 @@ from time import sleep
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from scapy.all import *
 
-HOST_IP = "10.0.0.205"
+HOST_IP = "192.168.0.13"
 FILLER_STRING = "\01"
 DELIMITER = "\00"
 RESEND_MESSGE_CODE = 9
